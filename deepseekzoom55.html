@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pro Video Görüşme & Ekran Paylaşımı</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/peerjs@1.4.7/dist/peerjs.min.js"></script>
+    <style>
+        body { font-family: 'Inter', sans-serif; overflow: hidden; margin: 0; padding: 0; }
+        .video-mirror { transform: scaleX(-1); }
+
+        /* Ana video - Karşı taraf */
+        #remoteVideoContainer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: black;
+            z-index: 10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        #remoteVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        /* Yerel video - Sağ alt köşe */
+        #localVideoBox {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            width: 160px;
+            height: 90px;
+            z-index: 100; /* Tam ekranda bile üstte kalsın */
+            border: 3px solid #4b5563;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.8);
+            background: black;
+            transition: all 0.3s;
+        }
+
+        /* Tam ekran modunda küçük kamerayı biraz daha küçült */
+        body:fullscreen #localVideoBox,
+        body:-webkit-full-screen #localVideoBox,
+        body:-moz-full-screen #localVideoBox {
+            width: 140px;
+            height: 80px;
+            bottom: 15px;
+            right: 15px;
+        }
+
+        #localVideo {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+        }
+
+        .label {
+            position: absolute;
+            bottom: 4px;
+            left: 4px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            font-size: 0.6rem;
+            padding: 2px 6px;
+            border-radius: 4px;
+            z-index: 2;
+        }
+
+        /* Kontrol Paneli - Sol üst köşe */
+        .control-panel {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 50; /* Tam ekranda gizlenecek */
+            background: rgba(31, 41, 55, 0.95);
+            padding: 12px;
+            border-radius: 12px;
+            max-width: 280px;
+            backdrop-filter: blur(4px);
+            border: 1px solid #4b5563;
+            transition: opacity 0.3s;
+        }
+
+        /* Tam ekranda kontrol panelini gizle */
+        body:fullscreen .control-panel,
+        body:-webkit-full-screen .control-panel,
+        body:-moz-full-screen .control-panel {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        /* Fare üzerine gelince göster */
+        body:fullscreen .control-panel:hover,
+        body:-webkit-full-screen .control-panel:hover,
+        body:-moz-full-screen .control-panel:hover {
+            opacity: 0.9;
+        }
+
+        .control-panel input, .control-panel button {
+            margin-top: 6px;
+            width: 100%;
+        }
+
+        .control-panel .flex-row {
+            display: flex;
+            gap: 6px;
+        }
+
+        .control-panel .flex-row > * {
+            flex: 1;
+        }
+
+        /* Tam ekran butonu */
+        #fullscreenBtn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            border: 2px solid #10B981;
+            padding: 10px 16px;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 20;
+            display: none;
+            transition: all 0.3s;
+            font-size: 0.9rem;
+        }
+        
+        #fullscreenBtn:hover {
+            background: rgba(16, 185, 129, 0.8);
+            transform: scale(1.05);
+        }
+
+        /* Ekran paylaşım bilgi mesajı */
+        .screen-share-notice {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: #10B981;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.85rem;
+            z-index: 15;
+            display: none;
+            border: 2px solid #10B981;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; }
+            100% { opacity: 0.7; }
+        }
+
+        /* Durum mesajı */
+        #status {
+            position: fixed;
+            top: 16px;
+            left: 16px;
+            z-index: 25;
+            font-size: 0.75rem;
+            color: #d1d5db;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 10px;
+            border-radius: 8px;
+            margin-top: 90px;
+            border: 1px solid #4b5563;
+        }
+
+        /* Tam ekranda durum mesajını gizle */
+        body:fullscreen #status,
+        body:-webkit-full-screen #status,
+        body:-moz-full-screen #status {
+            opacity: 0.3;
+        }
+
+        /* Ekran paylaşım sahnesi (sadece siz görürsünüz) */
+        #screenShareStage {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #111827;
+            z-index: 5;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+        }
+
+        #screenVideo {
+            max-width: 90%;
+            max-height: 80%;
+            object-fit: contain;
+            border: 3px solid #374151;
+            border-radius: 8px;
+        }
+
+        /* Tam ekran çıkış butonu */
+        #exitFullscreenBtn {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.7);
+            color: white;
+            border: 1px solid #f87171;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            z-index: 100;
+            display: none;
+            font-size: 0.8rem;
+        }
+        
+        #exitFullscreenBtn:hover {
+            background: rgba(239, 68, 68, 0.8);
+        }
+
+        /* Tam ekran modu için CSS */
+        .fullscreen-mode .control-panel {
+            opacity: 0.1;
+        }
+        
+        .fullscreen-mode .control-panel:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white">
+
+    <!-- Karşı Tarafın Videosu - BURAYA EKRAN PAYLAŞIMI GELECEK -->
+    <div id="remoteVideoContainer">
+        <video id="remoteVideo" autoplay playsinline></video>
+        
+        <!-- Ekran paylaşım bilgi mesajı -->
+        <div class="screen-share-notice" id="screenShareNotice">
+            📺 Ekran Paylaşımı İzleniyor
+        </div>
+        
+        <!-- Tam ekran butonu - KARŞI TARAFA GÖSTERİLECEK -->
+        <button id="fullscreenBtn" onclick="toggleFullscreen()">🔲 Tam Ekran Yap</button>
+        
+        <!-- Tam ekrandan çıkış butonu -->
+        <button id="exitFullscreenBtn" onclick="exitFullscreen()">✕ Tam Ekrandan Çık</button>
+    </div>
+
+    <!-- Yerel Video (Sen) -->
+    <div id="localVideoBox">
+        <video id="localVideo" autoplay muted playsinline class="video-mirror"></video>
+        <div class="label">Sen</div>
+    </div>
+
+    <!-- Kontrol Paneli -->
+    <div class="control-panel">
+        <div class="text-sm text-gray-300 mb-1">Senin ID'n:</div>
+        <div id="myId" class="font-mono text-green-400 mb-2 truncate">...</div>
+
+        <input type="text" id="remoteIdInput" placeholder="Karşı ID" 
+               class="p-2 rounded bg-gray-700 text-white border border-gray-600 text-sm">
+        <input type="password" id="passwordInput" placeholder="Şifre" 
+               class="p-2 rounded bg-gray-700 text-white border border-gray-600 mt-1 text-sm">
+
+        <div class="flex-row mt-2">
+            <button onclick="connectToPeer()" 
+                    class="p-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded text-sm transition-colors">
+                Bağlan
+            </button>
+            <button onclick="toggleScreenShare()" id="shareBtn" 
+                    class="p-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded text-sm flex items-center justify-center gap-1 transition-colors">
+                <span id="shareIcon">📺</span>
+                <span id="shareBtnText">Paylaş</span>
+            </button>
+        </div>
+    </div>
+
+    <!-- Ekran paylaşım sahnesi (SADECE SİZ GÖRÜRSÜNÜZ) -->
+    <div id="screenShareStage">
+        <video id="screenVideo" autoplay playsinline></video>
+        <div class="absolute bottom-20 bg-black bg-opacity-70 px-4 py-2 rounded text-white font-bold">
+            📤 Ekranınız Karşı Tarafa Gönderiliyor
+        </div>
+        <div class="absolute bottom-10 text-gray-400 text-sm">
+            Bu pencere sadece sizde görünür
+        </div>
+    </div>
+
+    <div id="status">Durum: Hazır</div>
+
+    <script>
+        const EXPECTED_PASSWORD = "123";
+
+        let peer = null;
+        let localStream = null;
+        let currentCall = null;
+        let screenStream = null;
+        let isSharing = false;
+        let isReceiver = false; // Karşı taraf mı?
+        let isFullscreen = false;
+
+        const myIdEl = document.getElementById('myId');
+        const statusEl = document.getElementById('status');
+        const remoteVideoEl = document.getElementById('remoteVideo');
+        const localVideoEl = document.getElementById('localVideo');
+        const screenStage = document.getElementById('screenShareStage');
+        const screenVideo = document.getElementById('screenVideo');
+        const shareBtn = document.getElementById('shareBtn');
+        const shareBtnText = document.getElementById('shareBtnText');
+        const shareIcon = document.getElementById('shareIcon');
+        const fullscreenBtn = document.getElementById('fullscreenBtn');
+        const exitFullscreenBtn = document.getElementById('exitFullscreenBtn');
+        const screenShareNotice = document.getElementById('screenShareNotice');
+
+        // 1. Kamerayı Başlat
+        navigator.mediaDevices.getUserMedia({ 
+            video: { width: 1280, height: 720 },
+            audio: true 
+        })
+        .then(stream => {
+            localStream = stream;
+            localVideoEl.srcObject = stream;
+            initPeer();
+        })
+        .catch(err => {
+            statusEl.innerText = "Kamera Hatası: " + err;
+        });
+
+        // 2. PeerJS Başlat
+        function initPeer() {
+            peer = new Peer();
+            
+            peer.on('open', id => {
+                myIdEl.innerText = id;
+                statusEl.innerText = "✅ ID: " + id.substring(0, 8) + "...";
+            });
+
+            peer.on('call', call => {
+                isReceiver = true;
+                statusEl.innerText = "📞 Gelen çağrı...";
+                
+                const incomingPassword = call.metadata?.password;
+                if (incomingPassword === EXPECTED_PASSWORD) {
+                    call.answer(localStream);
+                    handleCall(call);
+                } else {
+                    call.close();
+                    statusEl.innerText = "❌ Hatalı şifre!";
+                }
+            });
+
+            peer.on('error', err => {
+                console.error('PeerJS hatası:', err);
+                statusEl.innerText = "❌ Hata: " + err.type;
+            });
+        }
+
+        // 3. Arama Yap
+        function connectToPeer() {
+            const remoteId = document.getElementById('remoteIdInput').value.trim();
+            const password = document.getElementById('passwordInput').value;
+
+            if (!remoteId) {
+                alert("Lütfen karşı tarafın ID'sini girin!");
+                return;
+            }
+            
+            if (password !== EXPECTED_PASSWORD) {
+                alert("Hatalı Şifre!");
+                return;
+            }
+            
+            if (!localStream) {
+                alert("Kamera izni gerekli!");
+                return;
+            }
+
+            statusEl.innerText = "📞 Aranıyor: " + remoteId.substring(0, 8) + "...";
+            const call = peer.call(remoteId, localStream, { 
+                metadata: { password: password } 
+            });
+            handleCall(call);
+        }
+
+        // Ortak Arama Yönetimi
+        function handleCall(call) {
+            currentCall = call;
+            
+            call.on('stream', remoteStream => {
+                statusEl.innerText = "✅ Bağlantı Kuruldu!";
+                remoteVideoEl.srcObject = remoteStream;
+                
+                // Karşı taraf ise tam ekran butonunu göster
+                if (isReceiver) {
+                    fullscreenBtn.style.display = 'block';
+                }
+            });
+            
+            // Data mesajlarını dinle (ekran paylaşımı için)
+            call.on('connection', connection => {
+                connection.on('data', data => {
+                    try {
+                        const message = JSON.parse(data);
+                        handleDataMessage(message);
+                    } catch (e) {
+                        console.log("Data mesajı:", data);
+                    }
+                });
+            });
+            
+            call.on('close', () => {
+                statusEl.innerText = "🔴 Bağlantı kesildi";
+                stopScreenShare();
+                exitFullscreen();
+                if (isReceiver) {
+                    fullscreenBtn.style.display = 'none';
+                    screenShareNotice.style.display = 'none';
+                    exitFullscreenBtn.style.display = 'none';
+                }
+            });
+            
+            call.on('error', err => {
+                statusEl.innerText = "❌ Çağrı hatası: " + err.message;
+            });
+        }
+
+        // Data mesajlarını işle
+        function handleDataMessage(message) {
+            if (message.type === 'screenShareStarted') {
+                // Karşı taraf ekran paylaşımı başlattı
+                screenShareNotice.style.display = 'block';
+                fullscreenBtn.style.display = 'block';
+                statusEl.innerText = "📺 Ekran paylaşımı izleniyor";
+                
+            } else if (message.type === 'screenShareStopped') {
+                // Karşı taraf ekran paylaşımı durdurdu
+                screenShareNotice.style.display = 'none';
+                fullscreenBtn.style.display = 'none';
+                exitFullscreenBtn.style.display = 'none';
+                statusEl.innerText = "✅ Bağlantı kuruldu";
+                exitFullscreen(); // Tam ekrandan çık
+            }
+        }
+
+        // --- EKRAN PAYLAŞIMI ---
+        async function toggleScreenShare() {
+            if (!currentCall) {
+                alert("Önce bir görüşme başlatmalısınız!");
+                return;
+            }
+
+            if (!isSharing) {
+                try {
+                    // Ekran paylaşımını başlat
+                    screenStream = await navigator.mediaDevices.getDisplayMedia({ 
+                        video: {
+                            cursor: "always",
+                            displaySurface: "monitor"
+                        },
+                        audio: true 
+                    });
+
+                    // Kendi ekranınızı kendinize göster
+                    screenStage.style.display = 'flex';
+                    screenVideo.srcObject = screenStream;
+                    
+                    // Buton güncelleme
+                    shareBtnText.innerText = "Durdur";
+                    shareIcon.innerText = "⏹️";
+                    shareBtn.classList.remove('bg-purple-600');
+                    shareBtn.classList.add('bg-red-600');
+                    statusEl.innerText = "📤 Ekran paylaşılıyor...";
+
+                    // Karşı tarafa ekran paylaşımı gönder
+                    const screenVideoTrack = screenStream.getVideoTracks()[0];
+                    const senders = currentCall.peerConnection.getSenders();
+                    const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                    
+                    if (videoSender && screenVideoTrack) {
+                        videoSender.replaceTrack(screenVideoTrack);
+                    }
+
+                    // Karşı tarafa bildirim gönder
+                    try {
+                        const dataChannel = currentCall.connection || currentCall.peerConnection.createDataChannel('notify');
+                        if (dataChannel.send) {
+                            dataChannel.send(JSON.stringify({ type: 'screenShareStarted' }));
+                        }
+                    } catch (e) {
+                        console.log("Data kanalı hatası:", e);
+                    }
+
+                    // Ekran paylaşımı durdurulursa
+                    screenVideoTrack.onended = () => {
+                        stopScreenShare();
+                    };
+
+                    isSharing = true;
+
+                } catch (err) {
+                    console.error("Ekran paylaşımı iptal edildi:", err);
+                    statusEl.innerText = "❌ Paylaşım iptal edildi";
+                }
+            } else {
+                stopScreenShare();
+            }
+        }
+
+        function stopScreenShare() {
+            if (!isSharing) return;
+
+            // Karşı tarafa bildirim gönder
+            try {
+                const dataChannel = currentCall.connection || currentCall.peerConnection.createDataChannel('notify');
+                if (dataChannel.send) {
+                    dataChannel.send(JSON.stringify({ type: 'screenShareStopped' }));
+                }
+            } catch (e) {
+                console.log("Data kanalı hatası:", e);
+            }
+
+            // Ekran paylaşımını kapat
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+                screenStream = null;
+            }
+
+            // Kendi ekranınızı kapat
+            screenStage.style.display = 'none';
+            
+            // Buton güncelleme
+            shareBtnText.innerText = "Paylaş";
+            shareIcon.innerText = "📺";
+            shareBtn.classList.remove('bg-red-600');
+            shareBtn.classList.add('bg-purple-600');
+            statusEl.innerText = "✅ Bağlantı kuruldu";
+
+            // Kendi kameranızı geri yükle
+            if (currentCall && localStream) {
+                const cameraTrack = localStream.getVideoTracks()[0];
+                const senders = currentCall.peerConnection.getSenders();
+                const videoSender = senders.find(s => s.track && s.track.kind === 'video');
+                
+                if (videoSender && cameraTrack) {
+                    videoSender.replaceTrack(cameraTrack);
+                }
+            }
+
+            isSharing = false;
+        }
+
+        // TAM EKRAN FONKSİYONLARI
+        function toggleFullscreen() {
+            const elem = document.documentElement; // Tüm sayfa
+            
+            if (!document.fullscreenElement && !document.webkitFullscreenElement && !document.msFullscreenElement) {
+                // Tam ekrana gir
+                if (elem.requestFullscreen) {
+                    elem.requestFullscreen();
+                } else if (elem.webkitRequestFullscreen) {
+                    elem.webkitRequestFullscreen();
+                } else if (elem.msRequestFullscreen) {
+                    elem.msRequestFullscreen();
+                }
+                
+                fullscreenBtn.style.display = 'none';
+                exitFullscreenBtn.style.display = 'block';
+                isFullscreen = true;
+                
+                // Tam ekran moduna geç
+                document.body.classList.add('fullscreen-mode');
+                
+            } else {
+                exitFullscreen();
+            }
+        }
+
+        function exitFullscreen() {
+            if (document.exitFullscreen) {
+                document.exitFullscreen();
+            } else if (document.webkitExitFullscreen) {
+                document.webkitExitFullscreen();
+            } else if (document.msExitFullscreen) {
+                document.msExitFullscreen();
+            }
+            
+            fullscreenBtn.style.display = 'block';
+            exitFullscreenBtn.style.display = 'none';
+            isFullscreen = false;
+            
+            // Tam ekran modundan çık
+            document.body.classList.remove('fullscreen-mode');
+        }
+
+        // Fullscreen değişimlerini dinle
+        document.addEventListener('fullscreenchange', handleFullscreenChange);
+        document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+        document.addEventListener('msfullscreenchange', handleFullscreenChange);
+
+        function handleFullscreenChange() {
+            if (document.fullscreenElement || document.webkitFullscreenElement || document.msFullscreenElement) {
+                // Tam ekrandayız
+                fullscreenBtn.style.display = 'none';
+                exitFullscreenBtn.style.display = 'block';
+                isFullscreen = true;
+                document.body.classList.add('fullscreen-mode');
+            } else {
+                // Tam ekrandan çıktık
+                fullscreenBtn.style.display = 'block';
+                exitFullscreenBtn.style.display = 'none';
+                isFullscreen = false;
+                document.body.classList.remove('fullscreen-mode');
+            }
+        }
+
+        // ESC tuşu ile tam ekrandan çık
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape' && isFullscreen) {
+                exitFullscreen();
+            }
+            
+            // F11 ile de tam ekran
+            if (e.key === 'F11') {
+                e.preventDefault();
+                toggleFullscreen();
+            }
+        });
+
+        // Pencere kapatıldığında
+        window.addEventListener('beforeunload', () => {
+            if (currentCall) {
+                currentCall.close();
+            }
+            if (screenStream) {
+                screenStream.getTracks().forEach(track => track.stop());
+            }
+        });
+    </script>
+</body>
+</html>
