@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>📺 Ortak Ekran & Tahta</title>
+<script src="https://unpkg.com/peerjs@1.5.4/dist/peerjs.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:100%;height:100%;overflow:hidden;background:#0a0a14;font-family:'Segoe UI',sans-serif;color:#fff}
+#app{display:flex;flex-direction:column;height:100vh}
+
+/* ÜST BAR */
+#topbar{background:linear-gradient(135deg,#1e293b,#0f172a);padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap;border-bottom:2px solid #334155;box-shadow:0 2px 12px rgba(0,0,0,.5);z-index:10}
+#topbar h1{font-size:18px;color:#fbbf24;margin-right:8px;white-space:nowrap}
+.tb-btn{background:#2563eb;color:#fff;border:0;padding:8px 14px;border-radius:8px;cursor:pointer;font-weight:600;font-size:13px;transition:all .2s}
+.tb-btn:hover{background:#1d4ed8;transform:translateY(-1px)}
+.tb-btn.danger{background:#dc2626}
+.tb-btn.danger:hover{background:#b91c1c}
+.tb-btn.success{background:#16a34a}
+.tb-btn.success:hover{background:#15803d}
+.tb-btn.fullscreen{background:#8b5cf6}
+.tb-btn.fullscreen:hover{background:#7c3aed}
+#roomInfo{background:rgba(255,255,255,.08);padding:6px 12px;border-radius:8px;font-size:13px;display:flex;gap:8px;align-items:center}
+#roomInfo b{color:#fbbf24;font-family:monospace;font-size:15px;letter-spacing:1px}
+#status{padding:6px 12px;border-radius:8px;font-size:12px;font-weight:600}
+.status-off{background:#7f1d1d;color:#fca5a5}
+.status-wait{background:#78350f;color:#fcd34d}
+.status-on{background:#14532d;color:#86efac}
+#joinInput{background:#1e293b;border:2px solid #334155;color:#fff;padding:8px 12px;border-radius:8px;font-size:14px;font-family:monospace;width:150px;text-transform:uppercase}
+#joinInput:focus{outline:none;border-color:#2563eb}
+
+/* ANA İÇERİK */
+#main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:8px;padding:8px;overflow:hidden}
+@media(max-width:900px){#main{grid-template-columns:1fr;grid-template-rows:1fr 1fr}}
+
+.panel{background:#111827;border-radius:12px;overflow:hidden;display:flex;flex-direction:column;border:2px solid #1f2937;position:relative}
+.panel-head{background:#1f2937;padding:8px 14px;font-size:13px;font-weight:700;color:#94a3b8;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #374151}
+.panel-head .tag{background:#2563eb;color:#fff;padding:2px 8px;border-radius:10px;font-size:11px}
+.panel-body{flex:1;position:relative;background:#000;overflow:hidden}
+
+/* EKRAN PAYLAŞIMI */
+#screenVideo{width:100%;height:100%;object-fit:contain;background:#000}
+#screenPlaceholder{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;color:#64748b;text-align:center;padding:20px}
+#screenPlaceholder .icon{font-size:64px;margin-bottom:16px;opacity:.5}
+#screenPlaceholder h3{font-size:18px;margin-bottom:8px;color:#94a3b8}
+
+/* ORTAK TAHTA */
+#board{width:100%;height:100%;background:#fff;cursor:crosshair;touch-action:none}
+#tools{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.85);backdrop-filter:blur(10px);padding:8px;border-radius:12px;display:flex;gap:6px;align-items:center;z-index:5;border:1px solid rgba(255,255,255,.1);flex-wrap:wrap;justify-content:center;max-width:95%}
+.tool-btn{background:#334155;border:0;color:#fff;width:36px;height:36px;border-radius:8px;cursor:pointer;font-size:16px;display:flex;align-items:center;justify-content:center;transition:all .15s}
+.tool-btn:hover{background:#475569}
+.tool-btn.active{background:#2563eb;box-shadow:0 0 0 2px #60a5fa}
+#colorPicker{width:36px;height:36px;border:0;border-radius:8px;cursor:pointer;background:transparent;padding:0}
+#sizeSlider{width:80px;accent-color:#2563eb}
+
+/* MODAL / GİRİŞ EKRANI */
+#intro{position:fixed;inset:0;background:rgba(5,10,30,.97);z-index:100;display:flex;align-items:center;justify-content:center;padding:20px}
+#intro.hidden{display:none}
+.intro-box{background:linear-gradient(135deg,#1e293b,#0f172a);padding:32px;border-radius:20px;max-width:520px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.6);border:1px solid #334155}
+.intro-box h2{color:#fbbf24;font-size:26px;margin-bottom:8px;text-align:center}
+.intro-box .sub{color:#94a3b8;text-align:center;margin-bottom:24px;font-size:14px;line-height:1.6}
+.intro-tabs{display:flex;gap:8px;margin-bottom:20px}
+.tab-btn{flex:1;padding:12px;background:#1f2937;border:2px solid #334155;color:#94a3b8;border-radius:10px;cursor:pointer;font-weight:600;font-size:14px;transition:all .2s}
+.tab-btn.active{background:#2563eb;border-color:#2563eb;color:#fff}
+.tab-content{display:none}
+.tab-content.active{display:block}
+.input-row{display:flex;gap:8px;margin-bottom:12px}
+.input-row input{flex:1;background:#0f172a;border:2px solid #334155;color:#fff;padding:12px;border-radius:10px;font-size:15px;font-family:monospace}
+.input-row input:focus{outline:none;border-color:#2563eb}
+.big-btn{width:100%;padding:14px;background:linear-gradient(135deg,#2563eb,#1d4ed8);color:#fff;border:0;border-radius:10px;font-size:15px;font-weight:700;cursor:pointer;margin-top:8px;transition:all .2s}
+.big-btn:hover{transform:translateY(-2px);box-shadow:0 6px 20px rgba(37,99,235,.4)}
+.hint{background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);color:#fcd34d;padding:10px;border-radius:8px;font-size:12px;margin-top:12px;line-height:1.6}
+
+/* KATILIMCI LISTESI */
+#peerList{position:absolute;top:40px;right:10px;background:rgba(0,0,0,.8);padding:8px 12px;border-radius:8px;font-size:11px;z-index:5;max-width:200px}
+#peerList .title{color:#fbbf24;font-weight:700;margin-bottom:4px}
+.peer-item{color:#86efac;padding:2px 0}
+
+/* BILDIRIM */
+#toast{position:fixed;top:20px;left:50%;transform:translateX(-50%) translateY(-100px);background:#16a34a;color:#fff;padding:12px 24px;border-radius:10px;font-weight:600;z-index:200;transition:transform .3s;box-shadow:0 8px 24px rgba(0,0,0,.4)}
+#toast.show{transform:translateX(-50%) translateY(0)}
+#toast.err{background:#dc2626}
+
+/* TAM EKRAN BUTONU (Panel üzerinde) */
+.fullscreen-overlay-btn{position:absolute;top:8px;right:8px;z-index:20;background:rgba(0,0,0,.7);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.15);color:#fff;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:12px;font-weight:600;display:flex;align-items:center;gap:6px;transition:all .2s}
+.fullscreen-overlay-btn:hover{background:rgba(255,255,255,.15);transform:scale(1.05)}
+.fullscreen-overlay-btn .icon{font-size:16px}
+
+/* Tam ekran modunda panel */
+.panel.fullscreen-mode{position:fixed;inset:0;z-index:50;border-radius:0;border:none;background:#000}
+.panel.fullscreen-mode .panel-head{display:none}
+.panel.fullscreen-mode .panel-body{flex:1}
+.panel.fullscreen-mode #tools{display:none}
+.panel.fullscreen-mode .fullscreen-overlay-btn{background:rgba(0,0,0,.8);border-color:rgba(255,255,255,.3)}
+.panel.fullscreen-mode .fullscreen-overlay-btn:hover{background:rgba(255,255,255,.2)}
+
+/* Tam ekranda tahta araçlarını göster */
+.panel.fullscreen-mode.show-tools #tools{display:flex;bottom:20px}
+
+/* Tam ekran çıkış butonu - tahtanın üzerinde */
+.exit-fullscreen-btn{position:fixed;top:20px;right:20px;z-index:60;background:rgba(220,38,38,.9);backdrop-filter:blur(8px);border:2px solid rgba(255,255,255,.2);color:#fff;padding:10px 18px;border-radius:12px;cursor:pointer;font-size:14px;font-weight:700;display:none;align-items:center;gap:8px;transition:all .2s;box-shadow:0 4px 20px rgba(0,0,0,.5)}
+.exit-fullscreen-btn:hover{background:#dc2626;transform:scale(1.05)}
+.exit-fullscreen-btn.show{display:flex}
+.exit-fullscreen-btn .icon{font-size:20px}
+</style>
+</head>
+<body>
+
+<!-- GİRİŞ EKRANI -->
+<div id="intro">
+  <div class="intro-box">
+    <h2>📺 Ortak Ekran & Tahta</h2>
+    <div class="sub">Ekranını paylaş, ortak tahtada birlikte yaz. Aynı odaya bağlanan herkes ekranı görür ve tahtaya yazabilir.</div>
+    
+    <div class="intro-tabs">
+      <button class="tab-btn active" onclick="switchTab('create')">🎯 Oda Oluştur</button>
+      <button class="tab-btn" onclick="switchTab('join')">🔗 Odaya Katıl</button>
+    </div>
+    
+    <div id="tab-create" class="tab-content active">
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:12px">Yeni bir oda oluştur ve arkadaşlarına kodu gönder:</p>
+      <button class="big-btn" onclick="createRoom()">✨ Yeni Oda Oluştur</button>
+    </div>
+    
+    <div id="tab-join" class="tab-content">
+      <p style="color:#94a3b8;font-size:13px;margin-bottom:12px">Arkadaşının verdiği oda kodunu gir:</p>
+      <div class="input-row">
+        <input type="text" id="joinCode" placeholder="Örn: A7X9K2" maxlength="10" style="text-transform:uppercase">
+      </div>
+      <button class="big-btn" onclick="joinRoom()">🚪 Odaya Katıl</button>
+    </div>
+    
+    <div class="hint">
+      💡 <b>Not:</b> Bu uygulama PeerJS (WebRTC) kullanır. İnternet üzerinden çalışır — aynı ağda olmanıza gerek yok. Oda kodu, IP yerine benzersiz bir bağlantı kimliğidir.
+    </div>
+  </div>
+</div>
+
+<!-- UYGULAMA -->
+<div id="app">
+  <div id="topbar">
+    <h1>📺 Ortak Ekran</h1>
+    <div id="roomInfo" style="display:none">
+      <span>Oda:</span><b id="roomCode">-</b>
+      <button class="tb-btn" style="padding:4px 10px;font-size:11px" onclick="copyRoom()">📋 Kopyala</button>
+    </div>
+    <div id="status" class="status-off">● Bağlı Değil</div>
+    <button id="shareBtn" class="tb-btn success" style="display:none" onclick="toggleShare()">📡 Ekranı Paylaş</button>
+    <button class="tb-btn danger" style="margin-left:auto" onclick="location.reload()">🔄 Yeniden Bağlan</button>
+  </div>
+  
+  <div id="main">
+    <!-- EKRAN PANELİ -->
+    <div class="panel" id="screenPanel">
+      <div class="panel-head">
+        <span>🖥️ Paylaşılan Ekran</span>
+        <span class="tag" id="screenTag">Kapalı</span>
+      </div>
+      <div class="panel-body">
+        <video id="screenVideo" autoplay playsinline style="display:none"></video>
+        <div id="screenPlaceholder">
+          <div class="icon">📺</div>
+          <h3>Ekran Paylaşımı Bekleniyor</h3>
+          <p>Oda sahibi "Ekranı Paylaş" butonuna bastığında ekran burada görünecek.</p>
+        </div>
+        <!-- TAM EKRAN BUTONU (Ekran paneli için) -->
+        <button class="fullscreen-overlay-btn" onclick="toggleFullscreen('screenPanel')" id="screenFullscreenBtn">
+          <span class="icon">⛶</span> Tam Ekran
+        </button>
+      </div>
+    </div>
+    
+    <!-- TAHTA PANELİ -->
+    <div class="panel" id="boardPanel">
+      <div class="panel-head">
+        <span>✏️ Ortak Tahta</span>
+        <span class="tag" id="boardTag">Hazır</span>
+      </div>
+      <div class="panel-body">
+        <canvas id="board"></canvas>
+        <div id="tools">
+          <button class="tool-btn active" data-tool="pen" onclick="setTool('pen')" title="Kalem">✏️</button>
+          <button class="tool-btn" data-tool="marker" onclick="setTool('marker')" title="Vurgulayıcı">🖍️</button>
+          <button class="tool-btn" data-tool="eraser" onclick="setTool('eraser')" title="Silgi">🧽</button>
+          <input type="color" id="colorPicker" value="#ef4444" title="Renk">
+          <input type="range" id="sizeSlider" min="1" max="30" value="4" title="Kalınlık">
+          <button class="tool-btn" onclick="clearBoard()" title="Temizle">🗑️</button>
+          <button class="tool-btn" onclick="undoBoard()" title="Geri Al">↩️</button>
+          <button class="tool-btn" onclick="toggleBoardFullscreen()" title="Tam Ekran">⛶</button>
+        </div>
+        <div id="peerList" style="display:none">
+          <div class="title">👥 Bağlı Kullanıcılar</div>
+          <div id="peerItems"></div>
+        </div>
+        <!-- TAM EKRAN BUTONU (Tahta paneli için) -->
+        <button class="fullscreen-overlay-btn" onclick="toggleFullscreen('boardPanel')" id="boardFullscreenBtn">
+          <span class="icon">⛶</span> Tam Ekran
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TAM EKRAN ÇIKIŞ BUTONU -->
+<button class="exit-fullscreen-btn" id="exitFullscreenBtn" onclick="exitFullscreen()">
+  <span class="icon">⛶</span> Tam Ekrandan Çık
+</button>
+
+<div id="toast"></div>
+
+<script>
+// ─────────────────────────────────────────────────────────────────────────────
+// DURUM
+// ─────────────────────────────────────────────────────────────────────────────
+let peer = null;
+let myId = null;
+let isHost = false;
+let connections = [];
+let hostConn = null;
+let currentStream = null;
+let currentCall = null;
+let myName = 'Misafir-' + Math.floor(Math.random()*1000);
+let fullscreenPanel = null; // Hangi panel tam ekranda
+
+// Tahta durumu
+let currentTool = 'pen';
+let isDrawing = false;
+let lastX = 0, lastY = 0;
+let strokes = [];
+let currentStroke = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAM EKRAN
+// ─────────────────────────────────────────────────────────────────────────────
+function toggleFullscreen(panelId) {
+  const panel = document.getElementById(panelId);
+  const isFullscreen = panel.classList.contains('fullscreen-mode');
+  
+  if (isFullscreen) {
+    exitFullscreen();
+  } else {
+    enterFullscreen(panelId);
+  }
+}
+
+function enterFullscreen(panelId) {
+  const panel = document.getElementById(panelId);
+  
+  // Önceki tam ekranı temizle
+  if (fullscreenPanel) {
+    document.getElementById(fullscreenPanel).classList.remove('fullscreen-mode');
+  }
+  
+  panel.classList.add('fullscreen-mode');
+  
+  // Tahta paneli ise araçları göster
+  if (panelId === 'boardPanel') {
+    panel.classList.add('show-tools');
+  }
+  
+  fullscreenPanel = panelId;
+  document.getElementById('exitFullscreenBtn').classList.add('show');
+  
+  // Canvas'ı yeniden boyutlandır
+  if (panelId === 'boardPanel') {
+    setTimeout(resizeCanvas, 200);
+  }
+  
+  toast('⛶ Tam ekran modu');
+}
+
+function exitFullscreen() {
+  if (!fullscreenPanel) return;
+  
+  const panel = document.getElementById(fullscreenPanel);
+  panel.classList.remove('fullscreen-mode');
+  panel.classList.remove('show-tools');
+  
+  fullscreenPanel = null;
+  document.getElementById('exitFullscreenBtn').classList.remove('show');
+  
+  // Canvas'ı yeniden boyutlandır
+  setTimeout(resizeCanvas, 200);
+  toast('Tam ekrandan çıkıldı');
+}
+
+// Tahta için özel tam ekran
+function toggleBoardFullscreen() {
+  toggleFullscreen('boardPanel');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// TAB GEÇİŞİ
+// ─────────────────────────────────────────────────────────────────────────────
+function switchTab(tab){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('tab-'+tab).classList.add('active');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ODA OLUŞTUR (HOST)
+// ─────────────────────────────────────────────────────────────────────────────
+function createRoom(){
+  const code = generateCode();
+  isHost = true;
+  initPeer(code);
+}
+
+function joinRoom(){
+  const code = document.getElementById('joinCode').value.trim().toUpperCase();
+  if(!code || code.length < 3){
+    toast('Lütfen geçerli bir oda kodu girin!','err');
+    return;
+  }
+  isHost = false;
+  initPeer(null, code);
+}
+
+function generateCode(){
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  let code = '';
+  for(let i=0;i<6;i++) code += chars[Math.floor(Math.random()*chars.length)];
+  return code;
+}
+
+function initPeer(id, connectTo=null){
+  setStatus('wait','● Bağlanıyor...');
+  
+  const opts = {
+    debug: 1,
+    config: {
+      iceServers: [
+        {urls:'stun:stun.l.google.com:19302'},
+        {urls:'stun:stun1.l.google.com:19302'},
+        {urls:'stun:stun2.l.google.com:19302'},
+        {urls:'stun:stun3.l.google.com:19302'},
+        {urls:'stun:stun4.l.google.com:19302'}
+      ]
+    }
+  };
+  
+  if(id){
+    peer = new Peer(id, opts);
+  } else {
+    peer = new Peer(opts);
+  }
+  
+  peer.on('open', pid => {
+    myId = pid;
+    console.log('Peer ID:', pid);
+    
+    if(isHost){
+      document.getElementById('roomCode').textContent = pid;
+      document.getElementById('roomInfo').style.display = 'flex';
+      document.getElementById('shareBtn').style.display = 'inline-block';
+      setStatus('wait','● Oda hazır, bekleniyor...');
+      toast('Oda oluşturuldu! Kodu paylaş: ' + pid);
+    } else {
+      connectToHost(connectTo);
+    }
+    document.getElementById('intro').classList.add('hidden');
+  });
+  
+  peer.on('call', call => {
+    call.answer();
+    call.on('stream', remoteStream => {
+      showRemoteScreen(remoteStream);
+    });
+    call.on('close', () => {
+      hideRemoteScreen();
+    });
+    currentCall = call;
+  });
+  
+  peer.on('connection', conn => {
+    handleConnection(conn);
+  });
+  
+  peer.on('error', err => {
+    console.error('Peer error:', err);
+    if(err.type === 'unavailable-id'){
+      toast('Bu oda kodu zaten kullanımda!','err');
+      setTimeout(()=>location.reload(), 1500);
+    } else if(err.type === 'peer-unavailable'){
+      toast('Oda bulunamadı! Kodu kontrol et.','err');
+      setTimeout(()=>location.reload(), 1500);
+    } else {
+      toast('Bağlantı hatası: ' + err.type,'err');
+    }
+  });
+  
+  peer.on('disconnected', () => {
+    setStatus('off','● Bağlantı Kesildi');
+    toast('Sunucu bağlantısı kesildi. Yeniden deneniyor...','err');
+    setTimeout(()=>{ if(peer && !peer.destroyed) peer.reconnect(); }, 2000);
+  });
+}
+
+function connectToHost(hostId){
+  setStatus('wait','● Odaya bağlanılıyor...');
+  const conn = peer.connect(hostId, {reliable:true, metadata:{name:myName}});
+  
+  conn.on('open', () => {
+    hostConn = conn;
+    setStatus('on','● Bağlı (Misafir)');
+    toast('Odaya katıldın!');
+    document.getElementById('roomCode').textContent = hostId;
+    document.getElementById('roomInfo').style.display = 'flex';
+    sendToHost({type:'hello', name:myName});
+    sendToHost({type:'request-board'});
+  });
+  
+  conn.on('data', data => handleData(data, conn));
+  
+  conn.on('close', () => {
+    setStatus('off','● Bağlantı Kesildi');
+    toast('Host bağlantısı kesildi','err');
+    hostConn = null;
+  });
+  
+  conn.on('error', err => {
+    console.error('Conn error:', err);
+    toast('Bağlantı hatası','err');
+  });
+}
+
+function handleConnection(conn){
+  conn.on('open', () => {
+    connections.push(conn);
+    const name = conn.metadata?.name || 'Misafir';
+    setStatus('on','● Bağlı (Host) - ' + connections.length + ' kullanıcı');
+    toast(name + ' odaya katıldı!');
+    updatePeerList();
+    setTimeout(()=>{
+      conn.send({type:'board-state', strokes:strokes});
+    }, 500);
+  });
+  
+  conn.on('data', data => handleData(data, conn));
+  
+  conn.on('close', () => {
+    connections = connections.filter(c => c !== conn);
+    const name = conn.metadata?.name || 'Misafir';
+    toast(name + ' ayrıldı');
+    updatePeerList();
+    if(connections.length === 0){
+      setStatus('wait','● Oda hazır, bekleniyor...');
+    } else {
+      setStatus('on','● Bağlı (Host) - ' + connections.length + ' kullanıcı');
+    }
+  });
+}
+
+function handleData(data, conn){
+  if(!data || !data.type) return;
+  
+  switch(data.type){
+    case 'hello':
+      console.log('Merhaba:', data.name);
+      break;
+    case 'draw':
+      drawRemote(data.stroke);
+      break;
+    case 'board-state':
+      strokes = [];
+      clearCanvas();
+      data.strokes.forEach(s => drawRemote(s));
+      break;
+    case 'clear':
+      strokes = [];
+      clearCanvas();
+      break;
+    case 'undo':
+      if(strokes.length > 0){
+        strokes.pop();
+        redrawAll();
+      }
+      break;
+    case 'request-board':
+      if(isHost){
+        conn.send({type:'board-state', strokes:strokes});
+      }
+      break;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// VERİ GÖNDERME
+// ─────────────────────────────────────────────────────────────────────────────
+function broadcast(data){
+  if(isHost){
+    connections.forEach(c => {
+      try { c.send(data); } catch(e){}
+    });
+  } else if(hostConn){
+    try { hostConn.send(data); } catch(e){}
+  }
+}
+
+function sendToHost(data){
+  if(hostConn){
+    try { hostConn.send(data); } catch(e){}
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EKRAN PAYLAŞIMI
+// ─────────────────────────────────────────────────────────────────────────────
+async function toggleShare(){
+  const btn = document.getElementById('shareBtn');
+  
+  if(currentStream){
+    currentStream.getTracks().forEach(t => t.stop());
+    currentStream = null;
+    if(currentCall){
+      currentCall.close();
+      currentCall = null;
+    }
+    hideRemoteScreen();
+    btn.textContent = '📡 Ekranı Paylaş';
+    btn.classList.remove('danger');
+    btn.classList.add('success');
+    document.getElementById('screenTag').textContent = 'Kapalı';
+    toast('Ekran paylaşımı durduruldu');
+    return;
+  }
+  
+  try {
+    const stream = await navigator.mediaDevices.getDisplayMedia({
+      video: {cursor:'always'},
+      audio: false
+    });
+    
+    currentStream = stream;
+    
+    const video = document.getElementById('screenVideo');
+    video.srcObject = stream;
+    video.style.display = 'block';
+    document.getElementById('screenPlaceholder').style.display = 'none';
+    document.getElementById('screenTag').textContent = 'Paylaşılıyor';
+    
+    btn.textContent = '⏹ Paylaşımı Durdur';
+    btn.classList.remove('success');
+    btn.classList.add('danger');
+    
+    connections.forEach(conn => {
+      const call = peer.call(conn.peer, stream);
+    });
+    
+    stream.getVideoTracks()[0].onended = () => {
+      toggleShare();
+    };
+    
+    toast('Ekran paylaşımı başladı!');
+    
+  } catch(err){
+    console.error(err);
+    toast('Ekran paylaşımı iptal edildi','err');
+  }
+}
+
+function showRemoteScreen(stream){
+  const video = document.getElementById('screenVideo');
+  video.srcObject = stream;
+  video.style.display = 'block';
+  document.getElementById('screenPlaceholder').style.display = 'none';
+  document.getElementById('screenTag').textContent = 'Canlı Yayın';
+  toast('📺 Ekran yayınını alıyorsun!');
+}
+
+function hideRemoteScreen(){
+  const video = document.getElementById('screenVideo');
+  video.srcObject = null;
+  video.style.display = 'none';
+  document.getElementById('screenPlaceholder').style.display = 'flex';
+  document.getElementById('screenTag').textContent = 'Kapalı';
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ORTAK TAHTA
+// ─────────────────────────────────────────────────────────────────────────────
+const canvas = document.getElementById('board');
+const ctx = canvas.getContext('2d');
+
+function resizeCanvas(){
+  const parent = canvas.parentElement;
+  const dpr = window.devicePixelRatio || 1;
+  const w = parent.clientWidth;
+  const h = parent.clientHeight;
+  
+  if(w === 0 || h === 0) return;
+  
+  const current = canvas.toDataURL();
+  
+  canvas.width = w * dpr;
+  canvas.height = h * dpr;
+  canvas.style.width = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.scale(dpr, dpr);
+  
+  const img = new Image();
+  img.onload = () => {
+    ctx.drawImage(img, 0, 0, w, h);
+  };
+  img.src = current;
+}
+
+function clearCanvas(){
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+}
+
+function redrawAll(){
+  clearCanvas();
+  strokes.forEach(s => drawStroke(s));
+}
+
+function drawStroke(s){
+  if(!s.points || s.points.length < 2) return;
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = s.color;
+  ctx.lineWidth = s.size;
+  
+  if(s.tool === 'marker'){
+    ctx.globalAlpha = 0.4;
+    ctx.lineWidth = s.size * 3;
+  } else if(s.tool === 'eraser'){
+    ctx.strokeStyle = '#fff';
+    ctx.lineWidth = s.size * 2;
+  }
+  
+  ctx.beginPath();
+  ctx.moveTo(s.points[0].x, s.points[0].y);
+  for(let i=1;i<s.points.length;i++){
+    ctx.lineTo(s.points[i].x, s.points[i].y);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawRemote(s){
+  strokes.push(s);
+  drawStroke(s);
+}
+
+function getPos(e){
+  const rect = canvas.getBoundingClientRect();
+  const x = (e.touches ? e.touches[0].clientX : e.clientX) - rect.left;
+  const y = (e.touches ? e.touches[0].clientY : e.clientY) - rect.top;
+  return {x, y};
+}
+
+function startDraw(e){
+  e.preventDefault();
+  isDrawing = true;
+  const p = getPos(e);
+  lastX = p.x; lastY = p.y;
+  currentStroke = {
+    tool: currentTool,
+    color: document.getElementById('colorPicker').value,
+    size: parseInt(document.getElementById('sizeSlider').value),
+    points: [{x:p.x, y:p.y}]
+  };
+}
+
+function moveDraw(e){
+  if(!isDrawing) return;
+  e.preventDefault();
+  const p = getPos(e);
+  
+  currentStroke.points.push({x:p.x, y:p.y});
+  
+  ctx.save();
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = currentTool === 'eraser' ? '#fff' : currentStroke.color;
+  ctx.lineWidth = currentStroke.size * (currentTool === 'marker' ? 3 : currentTool === 'eraser' ? 2 : 1);
+  if(currentTool === 'marker') ctx.globalAlpha = 0.4;
+  ctx.beginPath();
+  ctx.moveTo(lastX, lastY);
+  ctx.lineTo(p.x, p.y);
+  ctx.stroke();
+  ctx.restore();
+  
+  lastX = p.x; lastY = p.y;
+}
+
+function endDraw(e){
+  if(!isDrawing) return;
+  isDrawing = false;
+  if(currentStroke && currentStroke.points.length > 1){
+    strokes.push(currentStroke);
+    broadcast({type:'draw', stroke:currentStroke});
+  }
+  currentStroke = null;
+}
+
+canvas.addEventListener('mousedown', startDraw);
+canvas.addEventListener('mousemove', moveDraw);
+canvas.addEventListener('mouseup', endDraw);
+canvas.addEventListener('mouseleave', endDraw);
+canvas.addEventListener('touchstart', startDraw, {passive:false});
+canvas.addEventListener('touchmove', moveDraw, {passive:false});
+canvas.addEventListener('touchend', endDraw);
+
+function setTool(t){
+  currentTool = t;
+  document.querySelectorAll('.tool-btn[data-tool]').forEach(b=>{
+    b.classList.toggle('active', b.dataset.tool === t);
+  });
+}
+
+function clearBoard(){
+  if(!confirm('Tahta tamamen silinecek. Emin misin?')) return;
+  strokes = [];
+  clearCanvas();
+  broadcast({type:'clear'});
+  toast('Tahta temizlendi');
+}
+
+function undoBoard(){
+  if(strokes.length === 0) return;
+  strokes.pop();
+  redrawAll();
+  broadcast({type:'undo'});
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// YARDIMCI
+// ─────────────────────────────────────────────────────────────────────────────
+function setStatus(type, text){
+  const el = document.getElementById('status');
+  el.textContent = text;
+  el.className = 'status-' + type;
+}
+
+function toast(msg, type='ok'){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = type === 'err' ? 'err show' : 'show';
+  setTimeout(()=>t.classList.remove('show'), 3000);
+}
+
+function copyRoom(){
+  const code = document.getElementById('roomCode').textContent;
+  navigator.clipboard.writeText(code).then(()=>{
+    toast('Oda kodu kopyalandı: ' + code);
+  }).catch(()=>{
+    prompt('Oda kodunu kopyala:', code);
+  });
+}
+
+function updatePeerList(){
+  const list = document.getElementById('peerList');
+  const items = document.getElementById('peerItems');
+  if(connections.length === 0){
+    list.style.display = 'none';
+    return;
+  }
+  list.style.display = 'block';
+  items.innerHTML = connections.map(c => {
+    const name = c.metadata?.name || 'Misafir';
+    return `<div class="peer-item">● ${name}</div>`;
+  }).join('');
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BAŞLAT
+// ─────────────────────────────────────────────────────────────────────────────
+window.addEventListener('resize', ()=>{
+  setTimeout(resizeCanvas, 100);
+});
+
+// Tam ekran değişikliklerini izle
+document.addEventListener('fullscreenchange', () => {
+  if (!document.fullscreenElement && fullscreenPanel) {
+    exitFullscreen();
+  }
+});
+
+setTimeout(()=>{
+  resizeCanvas();
+  clearCanvas();
+}, 100);
+</script>
+</body>
+</html>
