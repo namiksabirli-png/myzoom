@@ -23,6 +23,31 @@ body{
 }
 button{font-family:inherit}
 
+/* ===================== ŞİFRE EKRANI ===================== */
+#gate{position:fixed;inset:0;z-index:80;overflow-y:auto;
+  background:
+    radial-gradient(720px 420px at 82% -8%,rgba(124,92,255,.22),transparent),
+    radial-gradient(680px 420px at 10% 110%,rgba(45,212,167,.10),transparent),
+    var(--bg);
+  display:flex;align-items:center;justify-content:center;padding:22px}
+#gate.hidden{display:none}
+.gate-card{width:100%;max-width:400px;text-align:center}
+.gate-card .mark{width:54px;height:54px;border-radius:15px;display:grid;place-items:center;margin:0 auto 20px;
+  background:linear-gradient(140deg,var(--brand),var(--brand-deep));
+  box-shadow:0 10px 26px rgba(124,92,255,.42);font-size:26px}
+.gate-card h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin-bottom:8px}
+.gate-card p{color:var(--muted);font-size:14px;line-height:1.6;margin-bottom:24px}
+.gate-card .g-input{width:100%;background:var(--bg-2);border:1.5px solid var(--line);color:var(--ink);
+  padding:14px 15px;border-radius:12px;font-size:16px;outline:none;transition:.15s;margin-bottom:13px;text-align:center;letter-spacing:1px}
+.gate-card .g-input:focus{border-color:var(--brand)}
+.gate-card .g-input.shake{animation:shk .4s;border-color:var(--danger)}
+@keyframes shk{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
+.gate-card .cta{width:100%;border:0;border-radius:13px;padding:15px;font-size:15.5px;font-weight:800;cursor:pointer;
+  color:#fff;background:linear-gradient(135deg,var(--brand),var(--brand-deep));
+  box-shadow:0 10px 26px rgba(124,92,255,.34);transition:.15s}
+.gate-card .cta:hover{filter:brightness(1.07);transform:translateY(-1px)}
+.gate-err{color:var(--danger);font-size:13px;font-weight:600;min-height:18px;margin-bottom:10px}
+
 /* ===================== GİRİŞ (LOBİ) ===================== */
 #lobby{position:fixed;inset:0;z-index:60;overflow-y:auto;
   background:
@@ -171,8 +196,30 @@ body.fs #bar{display:none}
 </head>
 <body>
 
+<!-- ============================================================ -->
+<!-- ŞİFRE AYARI: Uygulama şifresini buradan değiştir.            -->
+<!-- GitHub'da dosyayı aç, tırnak içindeki yazıyı değiştir, kaydet.-->
+<!-- Örnek: const APP_PASSWORD = "yeni-sifrem-2025";               -->
+<!-- ============================================================ -->
+<script>
+  const APP_PASSWORD = "ders1234";
+</script>
+<!-- ============================================================ -->
+
+<!-- ===================== ŞİFRE EKRANI ===================== -->
+<div id="gate">
+  <div class="gate-card">
+    <div class="mark">🔒</div>
+    <h1>Ders Odası</h1>
+    <p>Devam etmek için şifreyi gir.</p>
+    <input class="g-input" id="gatePass" type="password" placeholder="Şifre" autocomplete="off" inputmode="text">
+    <div class="gate-err" id="gateErr"></div>
+    <button class="cta" onclick="checkGate()">Giriş Yap</button>
+  </div>
+</div>
+
 <!-- ===================== LOBİ ===================== -->
-<div id="lobby">
+<div id="lobby" class="hidden">
   <div class="lobby-card">
     <div class="eyebrow"><span class="mark">◐</span> Ders Odası</div>
     <h1>Canlı dersini <em>başlat.</em></h1>
@@ -273,6 +320,25 @@ body.fs #bar{display:none}
 <div id="toast"></div>
 
 <script>
+/* =====================================================================
+   ŞİFRE KONTROLÜ
+===================================================================== */
+function checkGate(){
+  const val=document.getElementById('gatePass').value;
+  if(val===APP_PASSWORD){
+    document.getElementById('gate').classList.add('hidden');
+    document.getElementById('lobby').classList.remove('hidden');
+    document.getElementById('nameInput').focus();
+  } else {
+    const inp=document.getElementById('gatePass');
+    const err=document.getElementById('gateErr');
+    err.textContent='Şifre yanlış. Tekrar dene.';
+    inp.classList.remove('shake'); void inp.offsetWidth; inp.classList.add('shake');
+    inp.value=''; inp.focus();
+  }
+}
+document.getElementById('gatePass').addEventListener('keydown',e=>{ if(e.key==='Enter') checkGate(); });
+
 /* =====================================================================
    DURUM
 ===================================================================== */
